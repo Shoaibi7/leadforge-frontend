@@ -2,6 +2,20 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../../../services/api';
+import { CampaignStatusBadge, RequiresReviewNotice } from '../../../components/campaigns/CampaignStatusBadge';
+import { CampaignLifecycleActions } from '../../../components/campaigns/CampaignLifecycleActions';
+import { DeliveryStatusCell } from '../../../components/campaigns/DeliveryStatusCell';
+import {
+  CampaignStatus,
+  DeliveryStatus,
+  RESOLVE_CONFIRMATION_MESSAGES,
+  ResolutionDecision,
+  STOP_CONFIRMATION_MESSAGE,
+  canDeleteCampaign,
+  createSingleFlight,
+  requestResolveDelivery,
+  requestStopCampaign,
+} from '../../../lib/campaign-status';
 
 interface Campaign {
   _id: string;
@@ -9,7 +23,8 @@ interface Campaign {
   subject: string;
   emailTemplateId: string;
   leadList: string[];
-  status: 'Draft' | 'Scheduled' | 'Running' | 'Completed' | 'Failed';
+  status: CampaignStatus;
+  requiresReview?: boolean;
   schedule?: string;
   createdAt: string;
 }
@@ -34,7 +49,10 @@ interface Lead {
 interface EmailLog {
   _id: string;
   recipientEmail: string;
-  status: 'Sent' | 'Delivered' | 'Opened' | 'Clicked' | 'Replied' | 'Failed';
+  status: string;
+  deliveryStatus?: DeliveryStatus;
+  resolution?: ResolutionDecision;
+  resolvable?: boolean;
   errorMessage?: string;
   openedAt?: string;
   clickedAt?: string;
@@ -52,6 +70,7 @@ interface AnalyticsData {
     name: string;
     subject: string;
     status: string;
+    requiresReview?: boolean;
     createdAt: string;
   };
   stats: {
@@ -61,6 +80,7 @@ interface AnalyticsData {
     clicked: number;
     replied: number;
     failed: number;
+    uncertain?: number;
   };
   logs: EmailLog[];
 }
@@ -99,6 +119,9 @@ export default function CampaignsPage() {
 
   // Action status loading
   const [actionLoadingCampaignId, setActionLoadingCampaignId] = useState<string | null>(null);
+  const [resolvingDeliveryId, setResolvingDeliveryId] = useState<string | null>(null);
+  // Synchronous guard against double submission (state updates are async)
+  const singleFlight = useRef(createSingleFlight());
   const [formSaving, setFormSaving] = useState(false);
   const [wizardError, setWizardError] = useState<string | null>(null);
 
@@ -283,6 +306,41 @@ export default function CampaignsPage() {
     }
   };
 
+  const handleStopCampaign = (campaignId: string) =>
+    singleFlight.current.run(`stop:${campaignId}`, async () => {
+      if (!confirm(STOP_CONFIRMATION_MESSAGE)) return;
+      setActionLoadingCampaignId(campaignId);
+      try {
+        const result = await requestStopCampaign(api, campaignId);
+        if (!result.ok) {
+          // 409: the campaign is no longer running (e.g. it just finished). Show why and refresh.
+          alert(result.message);
+        }
+        await fetchData();
+        if (showAnalyticsModal && selectedCampaignIdForAnalytics === campaignId) {
+          await fetchCampaignAnalytics(campaignId);
+        }
+      } finally {
+        setActionLoadingCampaignId(null);
+      }
+    });
+
+  const handleResolveDelivery = (deliveryId: string, decision: ResolutionDecision) => {
+    const campaignId = selectedCampaignIdForAnalytics;
+    if (!campaignId) return;
+    return singleFlight.current.run(`resolve:${deliveryId}`, async () => {
+      if (!confirm(RESOLVE_CONFIRMATION_MESSAGES[decision])) return;
+      setResolvingDeliveryId(deliveryId);
+      try {
+        const result = await requestResolveDelivery(api, campaignId, deliveryId, decision);
+        if (!result.ok) alert(result.message);
+        await Promise.all([fetchCampaignAnalytics(campaignId), fetchData()]);
+      } finally {
+        setResolvingDeliveryId(null);
+      }
+    });
+  };
+
   const handleDeleteCampaign = async (campaignId: string) => {
     if (!confirm('Are you sure you want to delete this outreach campaign?')) return;
     try {
@@ -301,22 +359,6 @@ export default function CampaignsPage() {
       c.subject.toLowerCase().includes(search.toLowerCase())
   );
 
-  const statusBadges: Record<string, string> = {
-    Draft: 'bg-slate-950/40 text-slate-400 border border-slate-800/30',
-    Scheduled: 'bg-blue-950/40 text-blue-400 border border-blue-800/30',
-    Running: 'bg-amber-950/40 text-amber-400 border border-amber-800/30 animate-pulse',
-    Completed: 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30',
-    Failed: 'bg-red-950/40 text-red-400 border border-red-800/30',
-  };
-
-  const logStatusBadges: Record<string, string> = {
-    Sent: 'bg-slate-950/40 text-slate-400 border border-slate-800/30',
-    Delivered: 'bg-blue-950/40 text-blue-400 border border-blue-800/30',
-    Opened: 'bg-amber-950/40 text-amber-400 border border-amber-800/30',
-    Clicked: 'bg-purple-950/40 text-purple-400 border border-purple-800/30',
-    Replied: 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30',
-    Failed: 'bg-red-950/40 text-red-400 border border-red-800/30',
-  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -409,35 +451,19 @@ export default function CampaignsPage() {
                       </td>
                       <td className="py-4.5 px-6 text-slate-400 font-semibold">{camp.leadList?.length || 0} leads</td>
                       <td className="py-4.5 px-6">
-                        <span className={`px-2.5 py-0.5 rounded-full text-2xs font-semibold uppercase tracking-wider ${statusBadges[camp.status]}`}>
-                          {camp.status}
-                        </span>
+                        <CampaignStatusBadge status={camp.status} requiresReview={camp.requiresReview} />
                       </td>
                       <td className="py-4.5 px-6 text-slate-500 text-xs">
                         {new Date(camp.createdAt).toLocaleDateString()}
                       </td>
                       <td className="py-4.5 px-6 text-right space-x-2">
-                        {/* Start Outreach Button */}
-                        {camp.status !== 'Running' && camp.status !== 'Completed' && (
-                          <button
-                            onClick={() => handleTriggerCampaignStart(camp._id)}
-                            disabled={isActionLoading}
-                            className="p-1.5 text-indigo-400 hover:text-indigo-300 hover:bg-slate-900 rounded-lg transition cursor-pointer disabled:opacity-50 inline-flex items-center"
-                            title="Start Campaign"
-                          >
-                            {isActionLoading ? (
-                              <svg className="animate-spin h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                              </svg>
-                            ) : (
-                              <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            )}
-                          </button>
-                        )}
+                        {/* Start / Stop (only where the campaign state machine allows it) */}
+                        <CampaignLifecycleActions
+                          status={camp.status}
+                          busy={isActionLoading}
+                          onStart={() => handleTriggerCampaignStart(camp._id)}
+                          onStop={() => handleStopCampaign(camp._id)}
+                        />
 
                         {/* View Analytics Button */}
                         {camp.status !== 'Draft' && (
@@ -465,7 +491,8 @@ export default function CampaignsPage() {
                           </button>
                         )}
 
-                        {/* Delete Button */}
+                        {/* Delete Button (a running campaign must be stopped first) */}
+                        {canDeleteCampaign(camp.status) && (
                         <button
                           onClick={() => handleDeleteCampaign(camp._id)}
                           className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-900 rounded-lg transition cursor-pointer inline-flex items-center"
@@ -475,6 +502,7 @@ export default function CampaignsPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                         </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -910,6 +938,10 @@ export default function CampaignsPage() {
                 </div>
               ) : analyticsData ? (
                 <>
+                  {analyticsData.campaign.requiresReview && (
+                    <RequiresReviewNotice uncertainCount={analyticsData.stats.uncertain} />
+                  )}
+
                   {/* Stats Aggregate row */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div className="bg-[#07080d]/80 border border-slate-900 p-4.5 rounded-2xl">
@@ -986,14 +1018,11 @@ export default function CampaignsPage() {
                                   )}
                                 </td>
                                 <td className="py-2.5 px-4">
-                                  <span className={`px-2 py-0.5 rounded text-4xs font-semibold uppercase ${logStatusBadges[log.status]}`}>
-                                    {log.status}
-                                  </span>
-                                  {log.status === 'Failed' && log.errorMessage && (
-                                    <span className="text-red-400 block text-4xs font-mono mt-0.5 truncate max-w-[200px]" title={log.errorMessage}>
-                                      Err: {log.errorMessage}
-                                    </span>
-                                  )}
+                                  <DeliveryStatusCell
+                                    log={log}
+                                    onResolve={handleResolveDelivery}
+                                    resolving={resolvingDeliveryId === log._id}
+                                  />
                                 </td>
                                 <td className="py-2.5 px-4 text-slate-500 font-mono text-4xs">
                                   {new Date(log.createdAt).toLocaleString()}

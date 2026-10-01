@@ -4,12 +4,14 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../../../../store/auth-store';
 import { api } from '../../../../services/api';
+import { CampaignStatusBadge } from '../../../../components/campaigns/CampaignStatusBadge';
 
 interface Campaign {
   _id: string;
   name: string;
   subject: string;
   status: string;
+  requiresReview?: boolean;
   createdAt: string;
 }
 
@@ -50,14 +52,6 @@ export default function AdminCampaignsPage() {
     fetchCampaigns(page);
   }, [isAuthenticated, isLoading, user, router, page, fetchCampaigns]);
 
-  const statusColors: Record<string, string> = {
-    Draft: 'bg-slate-900/40 text-slate-400 border-slate-800/30',
-    Scheduled: 'bg-indigo-950/40 text-indigo-400 border-indigo-800/30',
-    Running: 'bg-blue-950/40 text-blue-400 border-blue-800/30',
-    Completed: 'bg-emerald-950/40 text-emerald-400 border-emerald-800/30',
-    Failed: 'bg-red-950/40 text-red-400 border-red-800/30',
-  };
-
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
       <div>
@@ -89,9 +83,7 @@ export default function AdminCampaignsPage() {
                   <td className="px-4 py-3 font-medium text-white">{c.name}</td>
                   <td className="px-4 py-3 text-slate-300 max-w-xs truncate">{c.subject}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${statusColors[c.status] || 'bg-slate-900/40 text-slate-400 border-slate-800/30'}`}>
-                      {c.status}
-                    </span>
+                    <CampaignStatusBadge status={c.status} requiresReview={c.requiresReview} sizeClassName="px-2 py-0.5 text-[9px]" />
                   </td>
                   <td className="px-4 py-3 text-slate-400">{new Date(c.createdAt).toLocaleDateString()}</td>
                 </tr>

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../../store/auth-store';
 import { api } from '../../../services/api';
+import { CampaignStatusBadge } from '../../../components/campaigns/CampaignStatusBadge';
 
 interface DashboardMetrics {
   totalLeads: number;
@@ -19,6 +20,7 @@ interface Campaign {
   _id: string;
   name: string;
   status: string;
+  requiresReview?: boolean;
   createdAt: string;
 }
 
@@ -113,14 +115,6 @@ export default function AnalyticsPage() {
     { label: 'Converted', value: metrics.conversions, color: 'bg-emerald-500' },
   ];
   const maxFunnelVal = Math.max(funnelSteps[0].value, 1);
-
-  const campaignStatusColors: Record<string, string> = {
-    Draft: 'bg-slate-900/40 text-slate-400 border-slate-800/30',
-    Scheduled: 'bg-indigo-950/40 text-indigo-400 border-indigo-800/30',
-    Running: 'bg-blue-950/40 text-blue-400 border-blue-800/30',
-    Completed: 'bg-emerald-950/40 text-emerald-400 border-emerald-800/30',
-    Failed: 'bg-red-950/40 text-red-400 border-red-800/30',
-  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -225,9 +219,7 @@ export default function AnalyticsPage() {
                     <tr key={c._id} className="hover:bg-slate-900/20 transition">
                       <td className="px-4 py-3 font-medium text-white">{c.name}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border ${campaignStatusColors[c.status] || 'bg-slate-900/40 text-slate-400 border-slate-800/30'}`}>
-                          {c.status}
-                        </span>
+                        <CampaignStatusBadge status={c.status} requiresReview={c.requiresReview} sizeClassName="px-2 py-0.5 text-[9px]" />
                       </td>
                       <td className="px-4 py-3 text-right text-slate-300">{s?.sent ?? '—'}</td>
                       <td className="px-4 py-3 text-right text-blue-400">{s?.opened ?? '—'}</td>

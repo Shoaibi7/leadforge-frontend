@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import Link from 'next/link';
+import { CampaignStatusBadge } from '../../components/campaigns/CampaignStatusBadge';
 
 interface DashboardMetrics {
   totalLeads: number;
@@ -22,6 +23,7 @@ interface DashboardMetrics {
     _id: string;
     name: string;
     status: string;
+    requiresReview?: boolean;
     createdAt: string;
   }>;
 }
@@ -304,19 +306,7 @@ export default function DashboardPage() {
                       Created: {new Date(campaign.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                    campaign.status === 'Completed' 
-                      ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-800/30' 
-                      : campaign.status === 'Running'
-                        ? 'bg-blue-950/40 text-blue-400 border border-blue-800/30'
-                        : campaign.status === 'Scheduled'
-                          ? 'bg-indigo-950/40 text-indigo-400 border border-indigo-800/30'
-                          : campaign.status === 'Failed'
-                            ? 'bg-red-950/40 text-red-400 border border-red-800/30'
-                            : 'bg-slate-900/40 text-slate-400 border border-slate-800/30'
-                  }`}>
-                    {campaign.status}
-                  </span>
+                  <CampaignStatusBadge status={campaign.status} requiresReview={campaign.requiresReview} sizeClassName="px-2 py-0.5 text-[9px]" />
                 </div>
               ))}
               <div className="pt-1 text-center">
