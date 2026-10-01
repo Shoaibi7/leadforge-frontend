@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { LeadEmailProvenance } from '../../../components/leads/LeadEmailProvenance';
+import { FoundViaSearch, FOUND_VIA_SEARCH_LABEL } from '../../../components/leads/FoundViaSearch';
 import { EmailSourceType, confirmEmailMessage, requestConfirmLeadEmail } from '../../../lib/lead-email-provenance';
 import { createSingleFlight } from '../../../lib/campaign-status';
 import { api } from '../../../services/api';
@@ -18,6 +19,8 @@ interface Lead {
   phone?: string;
   website?: string;
   industry?: string;
+  /** Discovery context: the Maps search that found this lead (not its industry). */
+  sourceQuery?: string;
   country?: string;
   city?: string;
   status: 'New' | 'Contacted' | 'Replied' | 'Interested' | 'Closed';
@@ -578,7 +581,10 @@ export default function LeadsPage() {
                         className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
                       />
                     </td>
-                    <td className="py-4 px-6 font-semibold text-white truncate max-w-[200px]">{lead.companyName}</td>
+                    <td className="py-4 px-6 font-semibold text-white truncate max-w-[200px]">
+                      {lead.companyName}
+                      <FoundViaSearch query={lead.sourceQuery} />
+                    </td>
                     <td className="py-4 px-6 text-slate-200">{lead.ownerName || <span className="text-slate-600 italic">Unknown</span>}</td>
                     <td className="py-4 px-6 text-slate-400 text-xs">
                       <div className="space-y-1">
@@ -591,7 +597,7 @@ export default function LeadsPage() {
                         />
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-slate-400 truncate max-w-[150px]">{lead.industry || 'N/A'}</td>
+                    <td className="py-4 px-6 text-slate-400 truncate max-w-[150px]">{lead.industry || <span className="text-slate-600 italic">Unknown</span>}</td>
                     <td className="py-4 px-6">
                       <span className={`px-2.5 py-0.5 rounded-full text-2xs font-semibold uppercase tracking-wider ${statusBadges[lead.status]}`}>
                         {lead.status}
@@ -1175,9 +1181,19 @@ export default function LeadsPage() {
                     Industry
                   </span>
                   <span className="text-xs font-semibold text-slate-350 truncate">
-                    {selectedLeadForView.industry || <span className="text-slate-600 italic">Not Specified</span>}
+                    {selectedLeadForView.industry || <span className="text-slate-600 italic">Unknown</span>}
                   </span>
                 </div>
+
+                {/* Discovery context (not an industry) */}
+                {selectedLeadForView.sourceQuery && (
+                  <div className="bg-[#121422]/20 border border-slate-900/40 rounded-xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                      {FOUND_VIA_SEARCH_LABEL}
+                    </span>
+                    <FoundViaSearch query={selectedLeadForView.sourceQuery} block />
+                  </div>
+                )}
 
                 {/* Location */}
                 <div className="bg-[#121422]/20 border border-slate-900/40 rounded-xl p-3 flex flex-col justify-between">
@@ -1188,7 +1204,7 @@ export default function LeadsPage() {
                     {selectedLeadForView.city || selectedLeadForView.country ? (
                       `${selectedLeadForView.city || ''}${selectedLeadForView.city && selectedLeadForView.country ? ', ' : ''}${selectedLeadForView.country || ''}`
                     ) : (
-                      <span className="text-slate-600 italic">Not Specified</span>
+                      <span className="text-slate-600 italic">Unknown</span>
                     )}
                   </span>
                 </div>
