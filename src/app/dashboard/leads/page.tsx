@@ -1,13 +1,20 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { LeadEmailProvenance } from '../../../components/leads/LeadEmailProvenance';
+import { EmailSourceType, confirmEmailMessage, requestConfirmLeadEmail } from '../../../lib/lead-email-provenance';
+import { createSingleFlight } from '../../../lib/campaign-status';
 import { api } from '../../../services/api';
 
 interface Lead {
   _id: string;
   companyName: string;
-  ownerName: string;
-  email: string;
+  ownerName?: string;
+  email?: string;
+  emailSourceType?: EmailSourceType;
+  emailSourceMethod?: string;
+  emailSourceUrl?: string;
+  emailOutreachEligible?: boolean;
   phone?: string;
   website?: string;
   industry?: string;
@@ -48,6 +55,28 @@ export default function LeadsPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLeadForView, setSelectedLeadForView] = useState<Lead | null>(null);
+  const [confirmingLeadId, setConfirmingLeadId] = useState<string | null>(null);
+  const confirmGuard = useRef(createSingleFlight());
+
+  // "I confirm this contact address": records the user's decision only; nothing is sent.
+  const handleConfirmLeadEmail = (lead: Lead) =>
+    confirmGuard.current.run(lead._id, async () => {
+      if (!lead.email || !confirm(confirmEmailMessage(lead.email, lead.companyName))) return;
+      setConfirmingLeadId(lead._id);
+      try {
+        const result = await requestConfirmLeadEmail(api, lead._id, lead.email);
+        if (!result.ok) {
+          alert(result.message);
+        }
+        await fetchLeads();
+        if (selectedLeadForView?._id === lead._id) {
+          const fresh = await api.get(`/leads/${lead._id}`);
+          setSelectedLeadForView(fresh.data);
+        }
+      } finally {
+        setConfirmingLeadId(null);
+      }
+    });
   const [showViewModal, setShowViewModal] = useState(false);
 
   // Single Lead form states
@@ -155,8 +184,8 @@ export default function LeadsPage() {
   const handleOpenEdit = (lead: Lead) => {
     setEditingLead(lead);
     setFormCompany(lead.companyName);
-    setFormOwner(lead.ownerName);
-    setFormEmail(lead.email);
+    setFormOwner(lead.ownerName ?? '');
+    setFormEmail(lead.email ?? '');
     setFormPhone(lead.phone || '');
     setFormWebsite(lead.website || '');
     setFormIndustry(lead.industry || '');
@@ -550,8 +579,18 @@ export default function LeadsPage() {
                       />
                     </td>
                     <td className="py-4 px-6 font-semibold text-white truncate max-w-[200px]">{lead.companyName}</td>
-                    <td className="py-4 px-6 text-slate-200">{lead.ownerName}</td>
-                    <td className="py-4 px-6 text-slate-400 text-xs">{lead.email}</td>
+                    <td className="py-4 px-6 text-slate-200">{lead.ownerName || <span className="text-slate-600 italic">Unknown</span>}</td>
+                    <td className="py-4 px-6 text-slate-400 text-xs">
+                      <div className="space-y-1">
+                        <div>{lead.email || <span className="text-slate-600 italic">No email</span>}</div>
+                        <LeadEmailProvenance
+                          lead={lead}
+                          compact
+                          onConfirm={() => handleConfirmLeadEmail(lead)}
+                          confirming={confirmingLeadId === lead._id}
+                        />
+                      </div>
+                    </td>
                     <td className="py-4 px-6 text-slate-400 truncate max-w-[150px]">{lead.industry || 'N/A'}</td>
                     <td className="py-4 px-6">
                       <span className={`px-2.5 py-0.5 rounded-full text-2xs font-semibold uppercase tracking-wider ${statusBadges[lead.status]}`}>
@@ -1031,7 +1070,7 @@ export default function LeadsPage() {
                     {selectedLeadForView.companyName}
                   </h4>
                   <p className="text-xs text-slate-400">
-                    Contact Person: <span className="font-semibold text-slate-200">{selectedLeadForView.ownerName}</span>
+                    Contact Person: <span className="font-semibold text-slate-200">{selectedLeadForView.ownerName || 'Unknown'}</span>
                   </p>
                 </div>
                 <span className={`px-2.5 py-0.5 rounded-full text-2xs font-semibold uppercase tracking-wider ${statusBadges[selectedLeadForView.status]}`}>
@@ -1048,15 +1087,15 @@ export default function LeadsPage() {
                   </span>
                   <div className="flex items-center justify-between gap-2">
                     <a
-                      href={`mailto:${selectedLeadForView.email}`}
+                      href={selectedLeadForView.email ? `mailto:${selectedLeadForView.email}` : undefined}
                       className="text-xs font-semibold text-indigo-400 hover:underline truncate"
                       title="Send Email"
                     >
-                      {selectedLeadForView.email}
+                      {selectedLeadForView.email || 'No email'}
                     </a>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(selectedLeadForView.email);
+                        navigator.clipboard.writeText(selectedLeadForView.email ?? '');
                         alert('Email copied to clipboard!');
                       }}
                       className="text-slate-500 hover:text-slate-350 p-1 hover:bg-slate-900 rounded transition cursor-pointer"
@@ -1066,6 +1105,13 @@ export default function LeadsPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                       </svg>
                     </button>
+                  </div>
+                  <div className="mt-2">
+                    <LeadEmailProvenance
+                      lead={selectedLeadForView}
+                      onConfirm={() => handleConfirmLeadEmail(selectedLeadForView)}
+                      confirming={confirmingLeadId === selectedLeadForView._id}
+                    />
                   </div>
                 </div>
 

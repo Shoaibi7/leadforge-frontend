@@ -5,6 +5,8 @@ import { api } from '../../../services/api';
 import { CampaignStatusBadge, RequiresReviewNotice } from '../../../components/campaigns/CampaignStatusBadge';
 import { CampaignLifecycleActions } from '../../../components/campaigns/CampaignLifecycleActions';
 import { DeliveryStatusCell } from '../../../components/campaigns/DeliveryStatusCell';
+import { LeadEmailProvenance } from '../../../components/leads/LeadEmailProvenance';
+import type { EmailSourceType } from '../../../lib/lead-email-provenance';
 import {
   CampaignStatus,
   DeliveryStatus,
@@ -39,8 +41,12 @@ interface Template {
 interface Lead {
   _id: string;
   companyName: string;
-  ownerName: string;
-  email: string;
+  ownerName?: string;
+  email?: string;
+  emailSourceType?: EmailSourceType;
+  emailSourceMethod?: string;
+  emailSourceUrl?: string;
+  emailOutreachEligible?: boolean;
   status: string;
   industry?: string;
   country?: string;
@@ -53,6 +59,7 @@ interface EmailLog {
   deliveryStatus?: DeliveryStatus;
   resolution?: ResolutionDecision;
   resolvable?: boolean;
+  skipReason?: string;
   errorMessage?: string;
   openedAt?: string;
   clickedAt?: string;
@@ -755,8 +762,16 @@ export default function CampaignsPage() {
                                 />
                               </td>
                               <td className="py-2 px-4 font-semibold text-white truncate max-w-[150px]">{lead.companyName}</td>
-                              <td className="py-2 px-4 text-slate-200">{lead.ownerName}</td>
-                              <td className="py-2 px-4 text-slate-400 font-mono text-3xs">{lead.email}</td>
+                              <td className="py-2 px-4 text-slate-200">{lead.ownerName || <span className="text-slate-600 italic">Unknown</span>}</td>
+                              <td className="py-2 px-4 text-slate-400 font-mono text-3xs">
+                                <div className="space-y-0.5">
+                                  <div>{lead.email || <span className="italic text-slate-600">No email</span>}</div>
+                                  <LeadEmailProvenance lead={lead} compact />
+                                  {!lead.emailOutreachEligible && (
+                                    <div className="text-4xs text-yellow-300/80 font-sans">Will be skipped: not eligible for outreach</div>
+                                  )}
+                                </div>
+                              </td>
                               <td className="py-2 px-4 text-3xs text-slate-400">{lead.status}</td>
                             </tr>
                           ))
@@ -1011,7 +1026,7 @@ export default function CampaignsPage() {
                                 <td className="py-2.5 px-4">
                                   {log.lead ? (
                                     <span>
-                                      {log.lead.ownerName} ({log.lead.companyName})
+                                      {log.lead.ownerName || 'Unknown contact'} ({log.lead.companyName})
                                     </span>
                                   ) : (
                                     <span className="text-slate-600 italic">No CRM ref</span>

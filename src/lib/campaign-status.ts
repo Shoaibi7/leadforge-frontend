@@ -6,6 +6,8 @@
  * Completed, Failed and Stopped are terminal and can never be started again.
  */
 
+import { SKIP_REASON_TEXT } from './lead-email-provenance';
+
 export type CampaignStatus = 'Draft' | 'Scheduled' | 'Running' | 'Completed' | 'Failed' | 'Stopped';
 
 export type DeliveryStatus =
@@ -123,6 +125,8 @@ export interface DeliveryLogLike {
   deliveryStatus?: DeliveryStatus;
   resolution?: ResolutionDecision;
   resolvable?: boolean;
+  /** Backend reason code for skipped deliveries (e.g. EMAIL_PROVENANCE_UNVERIFIED). */
+  skipReason?: string;
 }
 
 export interface DeliveryDisplay {
@@ -183,7 +187,7 @@ export function deliveryDisplay(log: DeliveryLogLike): DeliveryDisplay {
         kind,
         label: 'Skipped',
         className: 'bg-zinc-900/60 text-zinc-400 border border-zinc-700/40',
-        note: 'Not sent: the lead is no longer available.',
+        note: (log.skipReason && SKIP_REASON_TEXT[log.skipReason]) || 'Not sent: the lead is no longer available.',
       };
     default:
       return { kind, label: log.status, className: 'bg-slate-950/40 text-slate-400 border border-slate-800/30' };
