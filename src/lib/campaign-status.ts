@@ -127,7 +127,12 @@ export interface DeliveryLogLike {
   resolvable?: boolean;
   /** Backend reason code for skipped deliveries (e.g. EMAIL_PROVENANCE_UNVERIFIED). */
   skipReason?: string;
+  /** True when the delivery never reached an email provider (outreach email disabled). */
+  simulated?: boolean;
 }
+
+/** Shown for deliveries that completed in simulation mode: nothing was sent to the lead. */
+export const SIMULATED_DELIVERY_NOTE = 'Not sent: outreach email is disabled, so no email left LeadForge.';
 
 export interface DeliveryDisplay {
   kind: DeliveryStatus;
@@ -153,6 +158,14 @@ export function deliveryDisplay(log: DeliveryLogLike): DeliveryDisplay {
     case 'sending':
       return { kind, label: 'Sending', className: 'bg-indigo-950/40 text-indigo-300 border border-indigo-800/30' };
     case 'sent': {
+      if (log.simulated) {
+        return {
+          kind,
+          label: 'Simulated',
+          className: 'bg-zinc-900/60 text-zinc-300 border border-zinc-600/40',
+          note: SIMULATED_DELIVERY_NOTE,
+        };
+      }
       const engaged = ENGAGEMENT_STYLES[log.status] ? log.status : 'Delivered';
       return {
         kind,

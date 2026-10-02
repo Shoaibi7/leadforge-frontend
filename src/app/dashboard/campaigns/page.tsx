@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../../../services/api';
 import { CampaignStatusBadge, RequiresReviewNotice } from '../../../components/campaigns/CampaignStatusBadge';
+import { SimulatedOutreachNotice } from '../../../components/campaigns/SimulatedOutreachNotice';
 import { CampaignLifecycleActions } from '../../../components/campaigns/CampaignLifecycleActions';
 import { DeliveryStatusCell } from '../../../components/campaigns/DeliveryStatusCell';
 import { LeadEmailProvenance } from '../../../components/leads/LeadEmailProvenance';
@@ -60,6 +61,7 @@ interface EmailLog {
   resolution?: ResolutionDecision;
   resolvable?: boolean;
   skipReason?: string;
+  simulated?: boolean;
   errorMessage?: string;
   openedAt?: string;
   clickedAt?: string;
@@ -88,6 +90,8 @@ interface AnalyticsData {
     replied: number;
     failed: number;
     uncertain?: number;
+    /** Deliveries completed without sending (outreach email disabled). Not part of sent/delivered. */
+    simulated?: number;
   };
   logs: EmailLog[];
 }
@@ -956,6 +960,7 @@ export default function CampaignsPage() {
                   {analyticsData.campaign.requiresReview && (
                     <RequiresReviewNotice uncertainCount={analyticsData.stats.uncertain} />
                   )}
+                  <SimulatedOutreachNotice count={analyticsData.stats.simulated} />
 
                   {/* Stats Aggregate row */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
